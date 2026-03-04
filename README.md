@@ -3,6 +3,7 @@
 Renames screenshots based on visible text and image content. It scans a folder of images and turns generic names into readable filenames like `aws-vpc-route-tables.png`.
 
 ---
+## NOTE: Currently only works on MacOS/Linux
 
 ## Requirements
 
