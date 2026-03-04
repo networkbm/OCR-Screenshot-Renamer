@@ -39,7 +39,7 @@ python3 main.py rename /path/to/screenshots
 
 # Recursively rename all images in nested folders
 python3 main.py rename /path/to/screenshots --recursive
-
+```
 
 ## Supported Image Formats
 
