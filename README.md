@@ -3,9 +3,9 @@
 Renames screenshots based on visible text and image content. It scans a folder of images and turns generic names into readable filenames like `aws-vpc-route-tables.png`.
 
 ---
-## NOTE: Currently only works on MacOS/Linux
 
-## Requirements
+
+## macOS Commands
 
 ```bash
 pip install pytesseract Pillow
@@ -18,25 +18,33 @@ Optional local vision backends:
 pip install transformers torch accelerate Pillow
 ```
 
-## Launch
+## Windows Commands
 
-From the project folder:
+```bash
+pip install pytesseract Pillow
+winget install UB-Mannheim.TesseractOCR
+```
+
+Optional local vision backends:
+
+```powershell
+pip install transformers torch accelerate Pillow
+```
+
+## Launch (macOS)
 
 ```bash
 cd /path/to/OCR-Screenshot-Renamer
-# Two modes are available: scan and rename. Scan previews what the files will be renamed to, while rename executes the action.
 python3 main.py scan /path/to/screenshots
 python3 main.py rename /path/to/screenshots
 ```
 
-### Examples
+## Launch (Windows)
 
 ```bash
-# Preview renames
-python3 main.py scan /path/to/screenshots
-
-# Apply renames
-python3 main.py rename /path/to/screenshots
+cd C:\path\to\OCR-Screenshot-Renamer
+python main.py scan C:\path\to\screenshots
+python main.py rename C:\path\to\screenshots
 ```
 
 ## Supported Image Formats

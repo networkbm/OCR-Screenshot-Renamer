@@ -9,7 +9,9 @@ Supports three backends:
 """
 
 import re
+import shutil
 from contextlib import redirect_stderr, redirect_stdout
+from os import environ
 from pathlib import Path
 from tempfile import TemporaryFile
 
@@ -330,8 +332,33 @@ class OcrCaptioner(BaseCaptioner):
                 "And Tesseract installed: https://github.com/tesseract-ocr/tesseract"
             )
         self._pytesseract = pytesseract
+        self._configure_tesseract_binary()
         self._Image = Image
         self._Output = Output
+
+    def _configure_tesseract_binary(self) -> None:
+        """
+        Ensure pytesseract can locate the system tesseract executable.
+        On Windows, many installs do not add Tesseract to PATH by default.
+        """
+        cmd = getattr(self._pytesseract.pytesseract, "tesseract_cmd", "tesseract")
+        if shutil.which(cmd):
+            return
+
+        env_value = environ.get("TESSERACT_CMD")
+        if env_value and Path(env_value).exists():
+            self._pytesseract.pytesseract.tesseract_cmd = env_value
+            return
+
+        windows_candidates = (
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        )
+        for candidate in windows_candidates:
+            candidate_path = Path(candidate)
+            if candidate_path.exists():
+                self._pytesseract.pytesseract.tesseract_cmd = str(candidate_path)
+                return
 
     def caption(self, image_path: Path) -> str:
         image = self._Image.open(image_path).convert("RGB")
