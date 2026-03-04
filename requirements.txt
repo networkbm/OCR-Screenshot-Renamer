@@ -1,0 +1,20 @@
+# img-rename requirements
+# Install with: pip install -r requirements.txt
+
+# ── Core ──────────────────────────────────────────────────────────────────────
+Pillow>=10.0.0          # Image loading and manipulation
+
+# ── BLIP local backend (recommended) ─────────────────────────────────────────
+# Uncomment to enable local image captioning (downloads model weights on first run)
+# transformers>=4.35.0
+# torch>=2.0.0
+# accelerate>=0.24.0
+
+# ── LLaVA local backend (optional, heavier) ──────────────────────────────────
+# Uses the same Transformers stack as BLIP but with a larger multimodal model
+# Example: shotrename scan ./screenshots --backend llava
+
+# ── OCR backend (optional) ────────────────────────────────────────────────────
+# Uncomment to enable Tesseract OCR fallback
+# pytesseract>=0.3.10
+# Also requires system Tesseract: https://github.com/tesseract-ocr/tesseract
