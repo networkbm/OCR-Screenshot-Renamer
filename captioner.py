@@ -114,6 +114,25 @@ def _token_score(token: str) -> int:
     return score
 
 
+def _is_id_like_token(token: str) -> bool:
+    lowered = token.lower()
+    if len(lowered) >= 14 and any(ch.isdigit() for ch in lowered) and any(ch.isalpha() for ch in lowered):
+        return True
+    if len(lowered) >= 10 and lowered.count("-") >= 2 and any(ch.isdigit() for ch in lowered):
+        return True
+    if lowered.endswith(".png") or lowered.endswith(".jpg") or lowered.endswith(".jpeg"):
+        return True
+    return False
+
+
+def _is_word_like_token(token: str) -> bool:
+    lowered = token.lower()
+    if _is_id_like_token(lowered):
+        return False
+    alpha_count = sum(1 for ch in lowered if ch.isalpha())
+    return alpha_count >= 3
+
+
 def _dedupe_preserving_order(tokens: list[str]) -> list[str]:
     seen = set()
     result = []
@@ -517,16 +536,21 @@ class OcrCaptioner(BaseCaptioner):
         for line_tokens in line_buckets.values():
             avg_height = sum(item["height"] for item in line_tokens) / len(line_tokens)
             avg_score = sum(item["score"] for item in line_tokens) / len(line_tokens)
+            tokens_only = [item["token"] for item in line_tokens]
+            word_like_count = sum(1 for token in tokens_only if _is_word_like_token(token))
+            id_like_count = sum(1 for token in tokens_only if _is_id_like_token(token))
+            quality = (avg_height * 0.8) + (avg_score * 1.4) + (word_like_count * 3.0) - (id_like_count * 2.5)
             prominent_lines.append(
                 {
-                    "tokens": [item["token"] for item in line_tokens],
+                    "tokens": tokens_only,
                     "avg_height": avg_height,
                     "avg_score": avg_score,
+                    "quality": quality,
                 }
             )
 
         prominent_lines.sort(
-            key=lambda item: (item["avg_height"], item["avg_score"], len(item["tokens"])),
+            key=lambda item: (item["quality"], item["avg_height"], len(item["tokens"])),
             reverse=True,
         )
 
@@ -540,17 +564,20 @@ class OcrCaptioner(BaseCaptioner):
 
         large_text_tokens = _dedupe_preserving_order(large_text_tokens)
         if len(large_text_tokens) >= 2:
-            return " ".join(large_text_tokens[:8])
+            filtered_large_text_tokens = [token for token in large_text_tokens if not _is_id_like_token(token)]
+            filtered_large_text_tokens = _dedupe_preserving_order(filtered_large_text_tokens)
+            if self._is_good_caption_candidate(filtered_large_text_tokens):
+                return " ".join(filtered_large_text_tokens[:8])
 
         high_signal = [
             token
             for token, score, confidence in (
                 (item["token"], item["score"], item["confidence"]) for item in tokens
             )
-            if score >= 2 or confidence >= 65
+            if (score >= 2 or confidence >= 65) and not _is_id_like_token(token)
         ]
         high_signal = _dedupe_preserving_order(high_signal)
-        if high_signal:
+        if self._is_good_caption_candidate(high_signal):
             return " ".join(high_signal[:8])
 
         text = self._pytesseract.image_to_string(
@@ -568,10 +595,20 @@ class OcrCaptioner(BaseCaptioner):
             best_line = ranked_lines[0]
             words = [_normalize_ocr_token(word) for word in best_line.split()]
             words = [word for word in words if word]
+            words = [word for word in words if not _is_id_like_token(word)]
             words = _dedupe_preserving_order(words)
-            if words:
+            if self._is_good_caption_candidate(words):
                 return " ".join(words[:8])
         return "unknown-screenshot"
+
+    def _is_good_caption_candidate(self, tokens: list[str]) -> bool:
+        if not tokens:
+            return False
+        word_like = [token for token in tokens if _is_word_like_token(token)]
+        if len(word_like) < 2:
+            return False
+        meaningful = [token for token in word_like if token.lower() not in OCR_NOISE_WORDS]
+        return len(meaningful) >= 2
 
     def _enhance_for_ocr(self, image):
         """Lightweight preprocessing to improve OCR on dense UI screenshots."""
