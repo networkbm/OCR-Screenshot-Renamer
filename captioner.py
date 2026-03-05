@@ -10,6 +10,7 @@ Supports three backends:
 
 import re
 import shutil
+import platform
 from contextlib import redirect_stderr, redirect_stdout
 from os import environ
 from pathlib import Path
@@ -361,6 +362,11 @@ class OcrCaptioner(BaseCaptioner):
                 return
 
     def caption(self, image_path: Path) -> str:
+        if platform.system() != "Windows":
+            return self._caption_standard(image_path)
+        return self._caption_windows_tuned(image_path)
+
+    def _caption_standard(self, image_path: Path) -> str:
         image = self._Image.open(image_path).convert("RGB")
         data = self._pytesseract.image_to_data(image, output_type=self._Output.DICT)
 
@@ -456,6 +462,164 @@ class OcrCaptioner(BaseCaptioner):
             if words:
                 return " ".join(words[:8])
         return "unknown-screenshot"
+
+    def _caption_windows_tuned(self, image_path: Path) -> str:
+        image = self._Image.open(image_path).convert("RGB")
+        ocr_configs = (
+            "--oem 3 --psm 6",
+            "--oem 3 --psm 11",
+        )
+        image_variants = (
+            image,
+            self._enhance_for_ocr(image),
+        )
+
+        token_rows = []
+        for variant in image_variants:
+            for config in ocr_configs:
+                try:
+                    data = self._pytesseract.image_to_data(
+                        variant,
+                        output_type=self._Output.DICT,
+                        config=config,
+                    )
+                except Exception:
+                    continue
+                token_rows.extend(self._extract_token_rows(data))
+
+        if not token_rows:
+            return "unknown-screenshot"
+
+        heights = [item["height"] for item in token_rows if item["height"] > 0]
+        median_height = _median(heights)
+        large_text_threshold = max(median_height * 1.35, median_height + 4.0)
+        large_candidate_threshold = max(median_height * 1.15, median_height + 2.0)
+
+        tokens = []
+        line_buckets: dict[tuple[int, int, int], list[dict]] = {}
+        for row in token_rows:
+            confidence = row["confidence"]
+            height = row["height"]
+            if confidence < 30 and height < large_candidate_threshold:
+                continue
+
+            token_info = {
+                "token": row["token"],
+                "score": _token_score(row["token"]),
+                "confidence": confidence,
+                "height": height,
+            }
+            tokens.append(token_info)
+            line_key = row["line_key"]
+            line_buckets.setdefault(line_key, []).append(token_info)
+
+        prominent_lines = []
+        for line_tokens in line_buckets.values():
+            avg_height = sum(item["height"] for item in line_tokens) / len(line_tokens)
+            avg_score = sum(item["score"] for item in line_tokens) / len(line_tokens)
+            prominent_lines.append(
+                {
+                    "tokens": [item["token"] for item in line_tokens],
+                    "avg_height": avg_height,
+                    "avg_score": avg_score,
+                }
+            )
+
+        prominent_lines.sort(
+            key=lambda item: (item["avg_height"], item["avg_score"], len(item["tokens"])),
+            reverse=True,
+        )
+
+        large_text_tokens: list[str] = []
+        for line in prominent_lines:
+            if line["avg_height"] < large_text_threshold:
+                continue
+            large_text_tokens.extend(line["tokens"])
+            if len(large_text_tokens) >= 8:
+                break
+
+        large_text_tokens = _dedupe_preserving_order(large_text_tokens)
+        if len(large_text_tokens) >= 2:
+            return " ".join(large_text_tokens[:8])
+
+        high_signal = [
+            token
+            for token, score, confidence in (
+                (item["token"], item["score"], item["confidence"]) for item in tokens
+            )
+            if score >= 2 or confidence >= 65
+        ]
+        high_signal = _dedupe_preserving_order(high_signal)
+        if high_signal:
+            return " ".join(high_signal[:8])
+
+        text = self._pytesseract.image_to_string(
+            self._enhance_for_ocr(image),
+            config="--oem 3 --psm 6",
+        )
+        lines = [line.strip() for line in text.splitlines() if len(line.strip()) > 4]
+        lines = [line for line in lines if any(ch.isalnum() for ch in line)]
+        if lines:
+            ranked_lines = sorted(
+                lines,
+                key=lambda line: sum(_token_score(token) for token in line.split()),
+                reverse=True,
+            )
+            best_line = ranked_lines[0]
+            words = [_normalize_ocr_token(word) for word in best_line.split()]
+            words = [word for word in words if word]
+            words = _dedupe_preserving_order(words)
+            if words:
+                return " ".join(words[:8])
+        return "unknown-screenshot"
+
+    def _enhance_for_ocr(self, image):
+        """Lightweight preprocessing to improve OCR on dense UI screenshots."""
+        from PIL import ImageOps
+
+        grayscale = ImageOps.grayscale(image)
+        enhanced = ImageOps.autocontrast(grayscale, cutoff=1)
+        # Upscale to improve recognition of small UI text.
+        width, height = enhanced.size
+        return enhanced.resize((width * 2, height * 2), self._Image.Resampling.BICUBIC)
+
+    def _extract_token_rows(self, data: dict) -> list[dict]:
+        rows = []
+        text_values = data.get("text", [])
+        conf_values = data.get("conf", [])
+        for index, (raw_text, raw_conf) in enumerate(zip(text_values, conf_values)):
+            token = _normalize_ocr_token(raw_text)
+            if not token:
+                continue
+
+            try:
+                confidence = float(raw_conf)
+            except (TypeError, ValueError):
+                confidence = -1.0
+
+            try:
+                height = float(data["height"][index])
+            except (TypeError, ValueError, KeyError, IndexError):
+                height = 0.0
+
+            try:
+                line_key = (
+                    int(data["block_num"][index]),
+                    int(data["par_num"][index]),
+                    int(data["line_num"][index]),
+                )
+            except (TypeError, ValueError, KeyError, IndexError):
+                line_key = (0, 0, index)
+
+            rows.append(
+                {
+                    "token": token,
+                    "confidence": confidence,
+                    "height": height,
+                    "line_key": line_key,
+                }
+            )
+        return rows
 
 
 # ---------------------------------------------------------------------------
