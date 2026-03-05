@@ -1,5 +1,3 @@
-"""Shared utility helpers for shotrename."""
-
 import os
 import sys
 from pathlib import Path
@@ -62,7 +60,6 @@ def print_banner() -> None:
 
 
 def human_readable_size(path: Path) -> str:
-    """Return human-readable file size string."""
     size = path.stat().st_size
     for unit in ("B", "KB", "MB", "GB"):
         if size < 1024:

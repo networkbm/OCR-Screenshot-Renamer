@@ -1,15 +1,6 @@
-"""
-filename_cleaner.py — Converts a raw caption into a clean, filename-safe slug.
-
-Pipeline:
-  caption → lowercase → remove stopwords → remove punctuation
-          → replace spaces with hyphens → truncate → done
-"""
-
 import re
 import unicodedata
 
-# Common English stopwords to strip (keeps technical terms like "aws", "vpc", etc.)
 STOPWORDS = {
     "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
     "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
@@ -82,16 +73,6 @@ GENERIC_VENDOR_WORDS = {
 
 
 def caption_to_filename(caption: str, extension: str = "") -> str:
-    """
-    Convert a human-readable caption into a safe, descriptive filename.
-
-    Args:
-        caption:   Raw caption string, e.g. "AWS VPC console showing route tables"
-        extension: File extension including dot, e.g. ".png"
-
-    Returns:
-        Full filename string, e.g. "aws-vpc-route-tables.png"
-    """
     slug = _slugify(caption)
     if not slug:
         slug = "unnamed-screenshot"
@@ -99,9 +80,6 @@ def caption_to_filename(caption: str, extension: str = "") -> str:
 
 
 def is_low_signal_caption(caption: str) -> bool:
-    """
-    Detect captions that are too generic to safely use as filenames.
-    """
     normalized = unicodedata.normalize("NFKD", caption)
     normalized = normalized.encode("ascii", "ignore").decode("ascii").lower().strip()
     normalized = re.sub(r"\s+", " ", normalized)
@@ -135,9 +113,6 @@ def is_low_signal_caption(caption: str) -> bool:
 
 
 def is_low_signal_filename(filename: str) -> bool:
-    """
-    Detect filenames that are still too generic after slug generation.
-    """
     stem = filename.rsplit(".", 1)[0].strip("-")
     if not stem:
         return True
@@ -156,45 +131,23 @@ def is_low_signal_filename(filename: str) -> bool:
 
 
 def _slugify(text: str) -> str:
-    # 1. Normalize unicode → ASCII-safe
     text = unicodedata.normalize("NFKD", text)
     text = text.encode("ascii", "ignore").decode("ascii")
-
-    # 2. Lowercase
     text = text.lower()
-
-    # 3. Replace common separators with spaces
     text = re.sub(r"[-_/\\|]+", " ", text)
-
-    # 4. Remove all punctuation except spaces and alphanumerics
     text = re.sub(r"[^a-z0-9\s]", " ", text)
-
-    # 5. Tokenize
     words = text.split()
-
-    # 6. Remove stopwords (but keep if result would be empty)
     filtered = [w for w in words if w not in STOPWORDS]
     if not filtered:
-        filtered = words  # fallback: keep all words
-
-    # 7. Remove numeric tokens so filenames stay word-based only
+        filtered = words
     filtered = [w for w in filtered if not any(ch.isdigit() for ch in w)]
-
-    # 8. Remove very short tokens (single chars that aren't meaningful)
     filtered = [w for w in filtered if len(w) > 1]
-
-    # 9. Join with hyphens
     slug = "-".join(filtered)
-
-    # 10. Truncate to max length at a word boundary
     if len(slug) > MAX_FILENAME_LENGTH:
         slug = slug[:MAX_FILENAME_LENGTH]
-        # Cut at last hyphen to avoid partial words
         last_hyphen = slug.rfind("-")
-        if last_hyphen > 20:  # only cut if we have a reasonable length left
+        if last_hyphen > 20:
             slug = slug[:last_hyphen]
-
-    # 11. Strip leading/trailing hyphens
     slug = slug.strip("-")
 
     return slug
@@ -232,20 +185,9 @@ def _is_generic_ui_phrase(words: list[str]) -> bool:
 
 
 def make_unique_filename(desired: str, existing: set) -> str:
-    """
-    If desired filename already exists in the existing set, append -02, -03, etc.
-
-    Args:
-        desired:  Desired filename, e.g. "aws-vpc-route-tables.png"
-        existing: Set of already-used filenames (strings)
-
-    Returns:
-        A unique filename string.
-    """
     if desired not in existing:
         return desired
 
-    # Split off extension
     path_parts = desired.rsplit(".", 1)
     if len(path_parts) == 2:
         stem, ext = path_parts[0], "." + path_parts[1]

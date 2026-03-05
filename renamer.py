@@ -1,14 +1,3 @@
-"""
-renamer.py — Folder scanning and renaming engine.
-
-Orchestrates:
-  1. Scan folder for supported images
-  2. Caption each image via the selected backend
-  3. Generate clean filename
-  4. Resolve duplicates
-  5. Rename (or preview in dry-run mode)
-"""
-
 from pathlib import Path
 from typing import Optional
 
@@ -38,9 +27,6 @@ class FolderRenamer:
         return self._captioner
 
     def process_folder(self, folder: Path, recursive: bool = False, dry_run: bool = True):
-        """
-        Main entry point. Scans folder and renames (or previews) images.
-        """
         images = self._collect_images(folder, recursive)
 
         if not images:
@@ -49,14 +35,12 @@ class FolderRenamer:
 
         print(f"{status_label('INFO', 'info')} Found {style(str(len(images)), 'filename')} image(s) to process.\n")
 
-        # Track used filenames per-directory to handle duplicates correctly
         used_names: dict[Path, set] = {}
 
         results = []
         for image_path in images:
             parent = image_path.parent
             if parent not in used_names:
-                # Pre-populate with existing filenames in this directory
                 used_names[parent] = {
                     p.name for p in parent.iterdir() if p.is_file()
                 }
@@ -66,7 +50,6 @@ class FolderRenamer:
                 results.append((image_path, result["status"], result["name"], result["reason"]))
                 used_names[parent].add(result["name"])
 
-        # Summary
         print("\n" + rule())
         renamed_count = 0
         skipped_count = 0
@@ -100,7 +83,6 @@ class FolderRenamer:
             print(f"\n{status_label('DONE', 'rename')} {style(str(renamed_count), 'filename')} renamed, {style(str(skipped_count), 'skip')} skipped.")
 
     def _collect_images(self, folder: Path, recursive: bool) -> list[Path]:
-        """Collect all supported image files in the folder."""
         pattern = "**/*" if recursive else "*"
         images = []
         for path in sorted(folder.glob(pattern)):
@@ -109,7 +91,6 @@ class FolderRenamer:
         return images
 
     def _process_image(self, image_path: Path, used_names: set) -> Optional[dict]:
-        """Caption one image and return the new filename."""
         print(f"  {status_label('FILE', 'info')} {style(image_path.name, 'filename')}")
         try:
             caption = self.captioner.caption(image_path)

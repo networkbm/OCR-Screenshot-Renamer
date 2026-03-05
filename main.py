@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""CLI entry point for the screenshot renamer."""
 
 import argparse
 import sys

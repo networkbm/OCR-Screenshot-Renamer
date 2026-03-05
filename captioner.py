@@ -1,12 +1,13 @@
-"""
-captioner.py — Local vision and OCR captioning module.
-
-Supports three backends:
-  - auto       : Try OCR first, then fall back to BLIP if OCR is weak
-  - blip       : Local BLIP image captioning via HuggingFace Transformers
-  - llava      : Local LLaVA vision-language model via HuggingFace Transformers
-  - ocr-only   : Tesseract OCR text extraction only
-"""
+# ================================================================
+# ███╗   ██╗███████╗████████╗██╗    ██╗ ██████╗ ██████╗ ██╗  ██╗██████╗ ███╗   ███╗
+# ████╗  ██║██╔════╝╚══██╔══╝██║    ██║██╔═══██╗██╔══██╗██║ ██╔╝██╔══██╗████╗ ████║
+# ██╔██╗ ██║█████╗     ██║   ██║ █╗ ██║██║   ██║██████╔╝█████╔╝ ██████╔╝██╔████╔██║
+# ██║╚██╗██║██╔══╝     ██║   ██║███╗██║██║   ██║██╔══██╗██╔═██╗ ██╔══██╗██║╚██╔╝██║
+# ██║ ╚████║███████╗   ██║   ╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗██████╔╝██║ ╚═╝ ██║
+# ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝     ╚═╝
+#
+#                        Crafted by networkbm
+# ================================================================
 
 import re
 import shutil
@@ -79,10 +80,6 @@ OCR_HINT_WORDS = {
     "alerts",
 }
 
-
-# ---------------------------------------------------------------------------
-# Base class
-# ---------------------------------------------------------------------------
 
 class BaseCaptioner:
     def caption(self, image_path: Path) -> str:
@@ -161,17 +158,7 @@ def _median(values: list[float]) -> float:
     return (ordered[midpoint - 1] + ordered[midpoint]) / 2
 
 
-# ---------------------------------------------------------------------------
-# BLIP (Local HuggingFace)
-# ---------------------------------------------------------------------------
-
 class BlipCaptioner(BaseCaptioner):
-    """
-    Uses BLIP locally via HuggingFace Transformers.
-    Privacy-friendly — no images leave your machine.
-    Requires: pip install transformers torch Pillow
-    """
-
     def __init__(self):
         try:
             from transformers import BlipProcessor, BlipForConditionalGeneration
@@ -209,11 +196,6 @@ class BlipCaptioner(BaseCaptioner):
 
 
 class LlavaCaptioner(BaseCaptioner):
-    """
-    Uses a local LLaVA checkpoint via HuggingFace Transformers.
-    This backend is more capable on dense technical screenshots, but much heavier than BLIP.
-    """
-
     DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
     PROMPT = (
         "Describe this screenshot in one short phrase for a filename. "
@@ -281,8 +263,6 @@ class LlavaCaptioner(BaseCaptioner):
 
 
 class AutoCaptioner(BaseCaptioner):
-    """Select the best available local backend."""
-
     def __init__(self):
         self._ocr_captioner = None
         self._vision_captioner = None
@@ -330,17 +310,7 @@ class AutoCaptioner(BaseCaptioner):
         return ocr_caption or "unknown-screenshot"
 
 
-# ---------------------------------------------------------------------------
-# OCR-Only (Tesseract)
-# ---------------------------------------------------------------------------
-
 class OcrCaptioner(BaseCaptioner):
-    """
-    Extracts visible text from the image using Tesseract OCR.
-    Useful as a fast fallback when vision models aren't available.
-    Requires: pip install pytesseract Pillow  +  system tesseract binary
-    """
-
     def __init__(self):
         try:
             import pytesseract
@@ -357,10 +327,6 @@ class OcrCaptioner(BaseCaptioner):
         self._Output = Output
 
     def _configure_tesseract_binary(self) -> None:
-        """
-        Ensure pytesseract can locate the system tesseract executable.
-        On Windows, many installs do not add Tesseract to PATH by default.
-        """
         cmd = getattr(self._pytesseract.pytesseract, "tesseract_cmd", "tesseract")
         if shutil.which(cmd):
             return
@@ -611,12 +577,10 @@ class OcrCaptioner(BaseCaptioner):
         return len(meaningful) >= 2
 
     def _enhance_for_ocr(self, image):
-        """Lightweight preprocessing to improve OCR on dense UI screenshots."""
         from PIL import ImageOps
 
         grayscale = ImageOps.grayscale(image)
         enhanced = ImageOps.autocontrast(grayscale, cutoff=1)
-        # Upscale to improve recognition of small UI text.
         width, height = enhanced.size
         return enhanced.resize((width * 2, height * 2), self._Image.Resampling.BICUBIC)
 
@@ -658,10 +622,6 @@ class OcrCaptioner(BaseCaptioner):
             )
         return rows
 
-
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
 
 def get_captioner(backend: str, llava_model: str | None = None) -> BaseCaptioner:
     if backend == "auto":
